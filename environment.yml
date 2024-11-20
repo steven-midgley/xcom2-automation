@@ -1,0 +1,17 @@
+name: xcom2-automation
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - opencv
+  - pytesseract
+  - pillow
+  - fastapi
+  - uvicorn
+  - stable-baselines3
+  - pip
+  - pip:
+      - pyautogui
+      - tesseract
+      - tensorflow
