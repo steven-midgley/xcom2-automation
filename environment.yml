@@ -7,9 +7,9 @@ dependencies:
   - opencv
   - pytesseract
   - pillow
-  - fastapi
-  - uvicorn
   - stable-baselines3
+  - gymnasium
+  - screeninfo
   - pip
   - pip:
       - pyautogui
