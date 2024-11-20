@@ -35,70 +35,40 @@ Installation
 
         conda env create -f environment.yml
 
-3. Activate the environment:
+3.  Activate the environment:
 
-    	conda activate xcom2-automation
+        conda activate xcom2-automation
 
-```sh
+4.  Run the backend server:
 
-```
+        uvicorn backend.server:app --reload
 
-conda activate xcom2-automation
+5.  Access the frontend:
 
-5. Run the backend server:
-
-   For FastAPI:
-
-uvicorn backend.server:app --reload
-
-6. Access the frontend:
-
-   Open index.html in a browser or set up a simple HTTP server to view the interface.
+    Open index.html in a browser or set up a simple HTTP server to view the interface.
 
 /xcom2-automation
-
 │
-
 ├── /backend # Backend for handling game interaction and API communication
-
 │ ├── /automation # PyAutoGUI and game interaction scripts
-
 │ ├── /api # API layer for frontend communication
-
 │ ├── /utils # Helper functions for backend logic
-
 │ ├── server .py # Entry point for running the backend
-
 │ └── environment.yml # Backend dependencies
-
 │
-
 ├── /frontend # Frontend for live demo and controls
-
 │ ├── /assets # Static assets (CSS, images, etc.)
-
 │ ├── /js # JavaScript for frontend logic
-
 │ ├── index.html # Main HTML for frontend interface
-
 │ └── README.md # Frontend documentation
-
 │
-
 ├── /scripts # Utility scripts for setup, training, and deployment
-
 │ ├── setup.py # Dependency setup
-
 │ ├── run_training.py # Script for training reinforcement learning models
-
 │ └── deploy_model.py # Deploy trained model into the automation loop
-
 │
-
 ├── LICENSE # License for the project
-
 ├── README.md # Project overview and instructions
-
 └── .gitignore # Git ignore file for unnecessary
 
 Usage
