@@ -3,86 +3,83 @@ import cv2
 import numpy as np
 import time
 
-# initiate mss
+# Initialize mss and ORB for feature detection
 sct = mss.mss()
+orb = cv2.ORB_create()
 
-# determine which screen to capture
-monitor = sct.monitors[0]
-print(monitor)
-# create variable
-previous_frame = None
+# Define monitor for screen capture
+monitor = {"left": -1728, "top": 120, "width": 1728, "height": 1115}
 
-# set screen for viewing feed
-feed = sct.monitors[1]
-
-# define monitor size & position
-# smaller resolution for better fps
-monitor = {
-    "left": -1728,
-    "top": 120,
-    "width": 1728,
-    "height": 1115,
-}
-
-# set feed position
+# Set feed position for displaying processed frame
 feed = {"left": 0, "top": 0, "width": 960, "height": 540}
 
+# Load templates for feature matching (e.g., troop icons, objectives)
+# Example: Precompute ORB descriptors for templates
+templates = [
+    {"name": "troop", "image": "troop_icon.png"},
+    {"name": "objective", "image": "objective_icon.png"},
+]
+for template in templates:
+    img = cv2.imread(template["image"], cv2.IMREAD_GRAYSCALE)
+    template["keypoints"], template["descriptors"] = orb.detectAndCompute(img, None)
 
-# for index, monitor in enumerate(sct.monitors):
-#     print(f"screen {index}:{monitor}")
-"""
-  create a loop that takes screen shots, converts the color
-  to rgb then display the image, exit w/ 'q'
-"""
+
+# Helper function to detect features in the global frame
+def detect_features(frame, templates):
+    detected = []
+    keypoints, descriptors = orb.detectAndCompute(frame, None)
+    for template in templates:
+        matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+        matches = matcher.match(template["descriptors"], descriptors)
+        if matches:
+            detected.append({"name": template["name"], "matches": matches})
+    return detected
+
+
+# Main loop
 try:
     while True:
-        # capture frame
-        # convert to gray scale
+        # Capture the current frame
         frame = np.array(sct.grab(monitor))
         grey_frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2GRAY)
 
-        # check for previous_frame
-        if previous_frame is not None:
-            # calculate dense flow
-            flow = cv2.calcOpticalFlowFarneback(
-                previous_frame,
-                grey_frame,
-                None,
-                pyr_scale=0.0,  # More sensitivity to smaller motions
-                levels=6,  # Multi-scale motion detection
-                winsize=5,  # Smaller window for finer details
-                iterations=10,  # Increased iterations for accuracy
-                poly_n=5,  # Fine motion capture
-                poly_sigma=1.5,  # Sharper detection
-                flags=0,  # Default
-            )
+        # Detect features in the frame
+        detected_features = detect_features(grey_frame, templates)
 
-            # detect magnitude
-            magnitude, angle = cv2.cartToPolar(flow[..., 0], flow[..., 1])
-            # hsv settings
-            hsv = np.zeros(
-                (grey_frame.shape[0], grey_frame.shape[1], 3), dtype=np.uint8
-            )
-            hsv[..., 1] = 126  # saturation
-            hsv[..., 0] = angle * 180 / np.pi / 2  # directional effects on hue
-            hsv[..., 2] = cv2.normalize(
-                magnitude, None, 0, 255, cv2.NORM_MINMAX
-            )  # normalize values
+        # Summarize global state
+        global_state = {
+            "phase": "Command",  # Static placeholder for now
+            "features": detected_features,
+        }
 
-            # flow feed
-            flow_feed = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+        # Debugging: Display detected features and global state
+        for feature in detected_features:
+            print(f"Detected: {feature['name']} with {len(feature['matches'])} matches")
 
-            # resize frame for feed
-            # display frame
-            # move window
-            mini_frame = cv2.resize(flow_feed, (feed["width"], feed["height"]))
-            cv2.imshow("live frame feed", mini_frame)
-            cv2.moveWindow("live frame feed", feed["left"], feed["top"])
+        # Generate a debug overlay
+        debug_frame = grey_frame.copy()
+        for feature in detected_features:
+            for match in feature["matches"]:
+                pt = orb.detect(grey_frame, None)[match.trainIdx].pt
+                cv2.circle(debug_frame, (int(pt[0]), int(pt[1])), 5, (0, 255, 0), -1)
 
-        # update previous_frame
-        previous_frame = grey_frame
+        # Resize for display
+        mini_frame = cv2.resize(debug_frame, (feed["width"], feed["height"]))
 
-        # exit on 'q'
+        # Display debug information
+        cv2.putText(
+            mini_frame,
+            f"Features Detected: {len(detected_features)}",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 255, 0),
+            2,
+        )
+        cv2.imshow("Live Frame Feed", mini_frame)
+        cv2.moveWindow("Live Frame Feed", feed["left"], feed["top"])
+
+        # Exit on 'q'
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
