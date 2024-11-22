@@ -1,17 +1,15 @@
 name: xcom2-automation
 channels:
-  - conda-forge
   - defaults
+  - conda-forge
 dependencies:
-  - python=3.9
+  - python=3.8
   - opencv
-  - pytesseract
+  - numpy
+  - pyobjc-framework-ScriptingBridge
   - pillow
-  - stable-baselines3
-  - gymnasium
-  - screeninfo
-  - pip
+  - pyautogui
+  - pynput
+  - requests
   - pip:
-      - pyautogui
-      - tesseract
-      - tensorflow
+      - opencv-python
