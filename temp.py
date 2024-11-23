@@ -21,10 +21,10 @@ lk_params = dict(
 # Variables for tracking keypoints and clusters
 prev_gray = None
 prev_points = None
-clusters = []
 
 
 def log_action(action, cluster, monitor):
+    """Log action with location."""
     cx, cy = cluster["center"]
     frame_x = monitor["left"] + cx
     frame_y = monitor["top"] + cy
@@ -75,7 +75,7 @@ def determine_actions(clusters, frame_width, frame_height):
 
 def validate_movement(expected_direction, prev_positions, current_positions):
     """Validate movement by comparing previous and current positions."""
-    if prev_positions is None or current_positions is None:
+    if len(prev_positions) == 0 or len(current_positions) == 0:
         return False
 
     movement_vector = np.mean(current_positions, axis=0) - np.mean(
@@ -99,30 +99,62 @@ def validate_movement(expected_direction, prev_positions, current_positions):
     return similarity > 0.8
 
 
+def detect_context_boundary(clusters, frame_width, frame_height):
+    """Detect if clusters are near the screen's boundaries."""
+    boundary_threshold = 0.1  # 10% of the screen's width/height
+    move_camera = False
+    camera_directions = []
+
+    for cluster in clusters:
+        cx, cy = cluster["center"]
+        if cx < frame_width * boundary_threshold:
+            move_camera = True
+            camera_directions.append("left")
+        elif cx > frame_width * (1 - boundary_threshold):
+            move_camera = True
+            camera_directions.append("right")
+        if cy < frame_height * boundary_threshold:
+            move_camera = True
+            camera_directions.append("up")
+        elif cy > frame_height * (1 - boundary_threshold):
+            move_camera = True
+            camera_directions.append("down")
+
+    return move_camera, list(set(camera_directions))  # Avoid duplicate directions
+
+
+def detect_new_context(prev_clusters, new_clusters):
+    """Check if new clusters appear after camera movement."""
+    prev_centers = {tuple(map(int, cluster["center"])) for cluster in prev_clusters}
+    new_centers = {tuple(map(int, cluster["center"])) for cluster in new_clusters}
+
+    new_context = new_centers - prev_centers
+    return len(new_context) > 0, list(new_context)
+
+
+def move_camera_if_needed(camera_directions, xcom_actions):
+    """Move the camera in specified directions."""
+    for direction in camera_directions:
+        xcom_actions.rotate_camera(direction)
+        print(f"Camera moved: {direction}")
+
+
 def execute_actions(actions, xcom_actions, prev_positions, current_positions):
     """Execute actions using the XCOM2Actions class."""
-    for action, cluster in zip(set(actions), clusters):
-        kx, ky = cluster["center"]
-        frame_x = monitor["left"] + kx
-        frame_y = monitor["top"] + ky
-        if action == "move_up":
-            xcom_actions.move("up")
-            print(f"Action: move_up at ({frame_x}, {frame_y})")
-        elif action == "move_down":
-            xcom_actions.move("down")
-            print(f"Action: move_down at ({frame_x}, {frame_y})")
-        elif action == "move_left":
-            xcom_actions.move("left")
-            print(f"Action: move_left at ({frame_x}, {frame_y})")
-        elif action == "move_right":
-            xcom_actions.move("right")
-            print(f"Action: move_right at ({frame_x}, {frame_y})")
-        # Validate movement
+    for action in set(actions):
         if validate_movement(action, prev_positions, current_positions):
             print(f"Action {action} validated successfully.")
         else:
             print(f"Action {action} failed validation. Retrying...")
             # Retry or handle failure as needed
+        if action == "move_up":
+            xcom_actions.move("up")
+        elif action == "move_down":
+            xcom_actions.move("down")
+        elif action == "move_left":
+            xcom_actions.move("left")
+        elif action == "move_right":
+            xcom_actions.move("right")
 
 
 def optical_flow_tracking(prev_gray, current_gray, prev_points):
@@ -147,46 +179,35 @@ try:
         # Process frame for keypoints and descriptors
         current_gray, keypoints, descriptors = process_frame(frame)
 
-        # Validate frame size and points
-        if prev_gray is None or prev_gray.shape != current_gray.shape:
-            prev_gray = current_gray
-            prev_points = np.array(
-                [kp.pt for kp in keypoints], dtype=np.float32
-            ).reshape(-1, 1, 2)
-            continue
-
-        # Optical flow tracking
-        new_points, prev_points = optical_flow_tracking(
-            prev_gray, current_gray, prev_points
-        )
-        if new_points is not None:
-            for p in new_points:
-                x, y = p.ravel()
-                cv2.circle(frame, (int(x), int(y)), 3, (0, 255, 0), -1)
-
-        # Visualize clusters
-        for cluster in clusters:
-            cx, cy = map(int, cluster["center"])
-            frame_x = monitor["left"] + cx
-            frame_y = monitor["top"] + cy
-            cv2.putText(
-                frame,
-                f"({frame_x}, {frame_y})",
-                (cx, cy),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                (255, 255, 0),
-                1,
-            )
-            cv2.circle(frame, (cx, cy), 5, (0, 255, 0), -1)
-
         # Cluster keypoints
         clusters = cluster_keypoints(keypoints)
 
-        # Determine actions
+        # Detect if camera movement is needed
+        move_camera, directions = detect_context_boundary(
+            clusters, monitor["width"], monitor["height"]
+        )
+
+        # Move camera if necessary
+        if move_camera:
+            move_camera_if_needed(directions, xc_actions())
+
+        # Optical flow tracking
+        if prev_gray is not None:
+            new_points, prev_points = optical_flow_tracking(
+                prev_gray, current_gray, prev_points
+            )
+        else:
+            new_points, prev_points = None, None
+
+        # Validate movement
         actions = determine_actions(clusters, monitor["width"], monitor["height"])
         execute_actions(actions, xc_actions(), prev_points, new_points)
-        logging.basicConfig(filename="xcom_actions.log", level=logging.INFO)
+
+        # Detect new context
+        new_clusters = cluster_keypoints(keypoints)
+        found_new_context, new_context = detect_new_context(clusters, new_clusters)
+        if found_new_context:
+            print(f"New context found: {new_context}")
 
         # Display the frame
         cv2.imshow("XCOM2 Automation", frame)
@@ -200,7 +221,6 @@ try:
         prev_points = np.array([kp.pt for kp in keypoints], dtype=np.float32).reshape(
             -1, 1, 2
         )
-
 
 except KeyboardInterrupt:
     print("Automation interrupted.")
